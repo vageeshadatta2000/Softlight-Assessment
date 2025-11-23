@@ -1,0 +1,16 @@
+# Environment
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Browser data (contains sensitive session info)
+user_data/
+
+# Output artifacts (optional - remove if you want to track)
+output/videos/
+
+# OS
+.DS_Store

@@ -1,0 +1,53 @@
+{
+  "task": "Filter out issues in linear by medium priority",
+  "states": [
+    {
+      "step": 1,
+      "timestamp": 1763859173025,
+      "screenshot": "step_1_1763859173025.jpg",
+      "url": "https://linear.app/softlighttest1/team/SOF/active",
+      "agent_thought": "I need to click the 'Filter' button to start filtering issues by medium priority.",
+      "action_taken": "click",
+      "action_params": {
+        "selector": "button",
+        "text": "Filter",
+        "element_index": 72
+      }
+    },
+    {
+      "step": 2,
+      "timestamp": 1763859179802,
+      "screenshot": "step_2_1763859179802.jpg",
+      "url": "https://linear.app/softlighttest1/team/SOF/active",
+      "agent_thought": "The filter menu is open, and I need to filter by medium priority. I should click on 'Priority' to set the filter criteria.",
+      "action_taken": "click",
+      "action_params": {
+        "selector": "div",
+        "text": "Priority",
+        "element_index": 22
+      }
+    },
+    {
+      "step": 3,
+      "timestamp": 1763859186712,
+      "screenshot": "step_3_1763859186712.jpg",
+      "url": "https://linear.app/softlighttest1/team/SOF/active",
+      "agent_thought": "I need to select 'Medium Priority' from the filter options.",
+      "action_taken": "click",
+      "action_params": {
+        "selector": "svg",
+        "text": "Medium Priority",
+        "element_index": 94
+      }
+    },
+    {
+      "step": 4,
+      "timestamp": 1763859194054,
+      "screenshot": "step_4_1763859194054.jpg",
+      "url": "https://linear.app/softlighttest1/team/SOF/active",
+      "agent_thought": "The 'Medium Priority' filter has been successfully selected, indicated by the checkmark next to index 117. No further action is required.",
+      "action_taken": "finish",
+      "action_params": {}
+    }
+  ]
+}

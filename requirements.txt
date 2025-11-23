@@ -1,0 +1,5 @@
+playwright
+openai
+pydantic
+python-dotenv
+pillow
