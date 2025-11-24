@@ -1,0 +1,53 @@
+{
+  "task": "Filter the issues by medium priority'",
+  "states": [
+    {
+      "step": 1,
+      "timestamp": 1763952518081,
+      "screenshot": "step_1_1763952518081.jpg",
+      "url": "https://linear.app/softlighttest1/team/SOF/active",
+      "agent_thought": "I see element labeled 'Filter' at index 75. Clicking it should open filter options.",
+      "action_taken": "click",
+      "action_params": {
+        "selector": "button",
+        "text": "Filter",
+        "element_index": 75
+      }
+    },
+    {
+      "step": 2,
+      "timestamp": 1763952526187,
+      "screenshot": "step_2_1763952526187.jpg",
+      "url": "https://linear.app/softlighttest1/team/SOF/active",
+      "agent_thought": "The Priority filter option needs to be selected to apply the 'Medium Priority' filter. I see 'Priority \u25b8' labeled at index 118.",
+      "action_taken": "click",
+      "action_params": {
+        "selector": "li",
+        "text": "Priority \u25b8",
+        "element_index": 118
+      }
+    },
+    {
+      "step": 3,
+      "timestamp": 1763952534267,
+      "screenshot": "step_3_1763952534267.jpg",
+      "url": "https://linear.app/softlighttest1/team/SOF/active",
+      "agent_thought": "I see element labeled 'Medium 2 issues' at index 116. I need to click it to filter by medium priority.",
+      "action_taken": "click",
+      "action_params": {
+        "selector": "li",
+        "text": "Medium 2 issues",
+        "element_index": 116
+      }
+    },
+    {
+      "step": 4,
+      "timestamp": 1763952549954,
+      "screenshot": "step_4_1763952549954.jpg",
+      "url": "https://linear.app/softlighttest1/team/SOF/active",
+      "agent_thought": "I see the 'Medium' priority filter is active, indicated by the text and icon at the top. The issues list displays only medium priority issues, as expected after filtering.",
+      "action_taken": "finish",
+      "action_params": {}
+    }
+  ]
+}
