@@ -27,7 +27,6 @@ class BrowserManager:
             headless=self.headless,
             channel="chrome",
             viewport={"width": 1280, "height": 720},
-            record_video_dir="output/videos",
             args=[
                 "--disable-blink-features=AutomationControlled",
                 "--no-sandbox",
@@ -90,7 +89,7 @@ class BrowserManager:
         elements = await self.page.evaluate("""async () => {
             const items = [];
             // Broad selector for modern apps
-            const selector = 'button, a, input, textarea, select, [role="button"], [role="link"], [role="checkbox"], [role="menuitem"], [role="tab"], [tabindex], div[onclick], span[onclick], svg';
+            const selector = 'button, a, input, textarea, select, [role="button"], [role="link"], [role="checkbox"], [role="menuitem"], [role="menuitemcheckbox"], [role="option"], [role="tab"], [role="treeitem"], [tabindex], li, div[onclick], span[onclick], svg';
 
             function isVisible(el) {
                 const rect = el.getBoundingClientRect();
@@ -159,55 +158,142 @@ class BrowserManager:
             raise RuntimeError("Browser not started")
 
         # 1. Get elements and raw screenshot
-        elements = await self.get_interactive_elements()
+        all_elements = await self.get_interactive_elements()
         screenshot_bytes = await self.page.screenshot(type="png")
-        
-        # 2. Open image with PIL
+
+        # 2. Filter to only visible, drawable elements to ensure index sync
+        # This is CRITICAL: only elements that will be drawn get indices
+        visible_elements = []
+        for el in all_elements:
+            rect = el['rect']
+            x, y, w, h = rect['x'], rect['y'], rect['width'], rect['height']
+            # Must be on-screen and have reasonable size
+            if x >= 0 and y >= 0 and w > 5 and h > 5:
+                visible_elements.append(el)
+
+        # 3. Remove highly overlapping boxes (OmniParser approach: 90% IoU threshold)
+        # This prevents parent/child elements from both being drawn
+        def compute_iou(rect1, rect2):
+            """Compute Intersection over Union between two rectangles."""
+            x1, y1, w1, h1 = rect1['x'], rect1['y'], rect1['width'], rect1['height']
+            x2, y2, w2, h2 = rect2['x'], rect2['y'], rect2['width'], rect2['height']
+
+            # Intersection
+            xi1 = max(x1, x2)
+            yi1 = max(y1, y2)
+            xi2 = min(x1 + w1, x2 + w2)
+            yi2 = min(y1 + h1, y2 + h2)
+
+            if xi2 <= xi1 or yi2 <= yi1:
+                return 0.0
+
+            inter_area = (xi2 - xi1) * (yi2 - yi1)
+
+            # Union
+            area1 = w1 * h1
+            area2 = w2 * h2
+            union_area = area1 + area2 - inter_area
+
+            return inter_area / union_area if union_area > 0 else 0.0
+
+        def compute_containment(rect1, rect2):
+            """Check how much rect1 is contained within rect2."""
+            x1, y1, w1, h1 = rect1['x'], rect1['y'], rect1['width'], rect1['height']
+            x2, y2, w2, h2 = rect2['x'], rect2['y'], rect2['width'], rect2['height']
+
+            # Intersection
+            xi1 = max(x1, x2)
+            yi1 = max(y1, y2)
+            xi2 = min(x1 + w1, x2 + w2)
+            yi2 = min(y1 + h1, y2 + h2)
+
+            if xi2 <= xi1 or yi2 <= yi1:
+                return 0.0
+
+            inter_area = (xi2 - xi1) * (yi2 - yi1)
+            area1 = w1 * h1
+
+            return inter_area / area1 if area1 > 0 else 0.0
+
+        # Sort by area (smaller elements first - prefer more specific elements)
+        visible_elements.sort(key=lambda el: el['rect']['width'] * el['rect']['height'])
+
+        # Filter out elements with high overlap
+        filtered_elements = []
+        for el in visible_elements:
+            should_keep = True
+            el_area = el['rect']['width'] * el['rect']['height']
+
+            # Always keep input/textarea elements - they're critical for typing
+            is_input = el.get('tagName') in ['input', 'textarea'] or el.get('role') in ['textbox', 'searchbox']
+
+            for kept_el in filtered_elements:
+                iou = compute_iou(el['rect'], kept_el['rect'])
+                containment = compute_containment(el['rect'], kept_el['rect'])
+
+                # Remove if >90% IoU (OmniParser threshold) or almost fully contained
+                # BUT always keep inputs even if contained
+                if (iou > 0.9 or containment > 0.95) and not is_input:
+                    should_keep = False
+                    break
+
+            if should_keep:
+                # Skip very large elements (likely containers) unless they're inputs
+                # Threshold: 30% of viewport (1280x720 = 921600, 30% = ~276000)
+                if el_area > 250000 and not is_input:
+                    continue
+                filtered_elements.append(el)
+
+        visible_elements = filtered_elements
+
+        # Re-index elements to match visual labels
+        for i, el in enumerate(visible_elements):
+            el['index'] = i
+
+        # 3. Open image with PIL
         image = Image.open(io.BytesIO(screenshot_bytes))
         draw = ImageDraw.Draw(image)
-        
+
         # Load a font (try default, fallback to simple)
         try:
-            font = ImageFont.truetype("Arial.ttf", 16)
+            font = ImageFont.truetype("Arial.ttf", 14)
         except:
             font = ImageFont.load_default()
 
-        # 3. Draw overlays
-        for i, el in enumerate(elements):
+        # 4. Draw overlays - now indices match exactly
+        for i, el in enumerate(visible_elements):
             rect = el['rect']
             x, y, w, h = rect['x'], rect['y'], rect['width'], rect['height']
-            
-            # Skip if off-screen (simple check)
-            if x < 0 or y < 0 or w <= 0 or h <= 0:
-                continue
-                
+
             # Draw bounding box (Red)
             draw.rectangle([x, y, x + w, y + h], outline="red", width=2)
-            
+
             # Draw ID tag (Red background, White text)
             tag_text = str(i)
-            
+
             # Calculate text size using getbbox
             text_bbox = font.getbbox(tag_text)
             text_width = text_bbox[2] - text_bbox[0]
             text_height = text_bbox[3] - text_bbox[1]
-            
+
             tag_w = text_width + 6
             tag_h = text_height + 6
-            
+
             # Position tag at top-left of box, but keep inside image
             tag_x = x
             tag_y = y - tag_h if y > tag_h else y
-            
+
             draw.rectangle([tag_x, tag_y, tag_x + tag_w, tag_y + tag_h], fill="red")
             draw.text((tag_x + 3, tag_y + 3), tag_text, fill="white", font=font)
-            
-        # 4. Save to base64
+
+        # 5. Save to base64
         buffered = io.BytesIO()
         image.save(buffered, format="PNG")
         img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
-        
-        return img_str, elements
+
+        print(f"Labeled {len(visible_elements)} elements (filtered from {len(all_elements)} detected, removed overlaps via IoU).")
+
+        return img_str, visible_elements
 
     async def highlight_element(self, selector: str):
         """Highlights an element for visual debugging."""
@@ -245,10 +331,11 @@ class BrowserManager:
         """)
 
     async def click_element(self, text_content: str = None, selector: str = None, coords: Dict[str, float] = None):
-        """Clicks an element. Prioritizes coordinates (SoM) if available."""
+        """Clicks an element. Prioritizes coordinates (SoM) if available.
+        Returns screenshot with cursor if coords provided, else None."""
         if not self.page:
             raise RuntimeError("Browser not started")
-        
+
         # 1. Priority: Coordinate Click (Visual Grounding / Set-of-Mark)
         # If the agent provided an index/coords, it chose a specific red box on the screenshot.
         # We trust this exact position over a potentially generic selector like "button".
@@ -257,12 +344,17 @@ class BrowserManager:
             try:
                 x = coords["x"] + coords["width"] / 2
                 y = coords["y"] + coords["height"] / 2
-                
+
                 await self._show_visual_cursor(x, y)
-                await asyncio.sleep(0.5) # Visual feedback
+                await asyncio.sleep(0.2) # Brief pause to show cursor
+
+                # Capture screenshot with cursor visible before clicking
+                cursor_screenshot = await self.page.screenshot(type="png")
+
                 await self.page.mouse.click(x, y)
+                await asyncio.sleep(0.5) # Wait for UI response
                 await self.page.wait_for_load_state("domcontentloaded")
-                return
+                return cursor_screenshot
             except Exception as e:
                 print(f"Coordinate click failed: {e}. Falling back to selector...")
 
@@ -301,35 +393,45 @@ class BrowserManager:
         """Types text into an input with visual feedback."""
         if not self.page:
             raise RuntimeError("Browser not started")
-        
+
         locator = None
         if selector:
             locator = self.page.locator(selector).first
-        
+
         if locator:
             try:
                 # Wait for element
                 await locator.wait_for(state="visible", timeout=5000)
-                
+
                 # Highlight (Blue for typing)
                 await locator.evaluate("el => el.style.outline = '3px solid blue'")
-                
+
                 # Visual cursor
                 box = await locator.bounding_box()
                 if box:
                     center_x = box["x"] + box["width"] / 2
                     center_y = box["y"] + box["height"] / 2
                     await self._show_visual_cursor(center_x, center_y)
-                
+
                 await asyncio.sleep(0.5)
-                await locator.fill(text)
+
+                # Try fill first, then fallback to keyboard type for contenteditable
+                try:
+                    await locator.fill(text)
+                except Exception as fill_error:
+                    print(f"Fill failed (likely contenteditable): {fill_error}")
+                    print("Using keyboard.type() instead...")
+                    # Clear existing content and type
+                    await locator.click()
+                    await self.page.keyboard.press("Control+a")
+                    await self.page.keyboard.type(text)
             except Exception as e:
-                print(f"Type failed with fill: {e}")
+                print(f"Type failed: {e}")
                 print("Attempting blind typing (assuming focus)...")
-                # Fallback: Just type into the void (useful if input is auto-focused)
                 await self.page.keyboard.type(text)
         else:
-            # Blind type
+            # Blind type - element should already be focused from click
+            print("No selector provided, typing with keyboard...")
             await self.page.keyboard.type(text)
 
     async def press_key(self, key: str):
